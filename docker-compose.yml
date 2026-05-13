@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # ============ DATABASE ============
+  postgres:
+    image: postgres:16-alpine
+    container_name: perpetest-postgres
+    environment:
+      POSTGRES_DB: perpetest
+      POSTGRES_USER: perpetest
+      POSTGRES_PASSWORD: perpetest123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U perpetest"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============ CACHE ============
+  redis:
+    image: redis:7-alpine
+    container_name: perpetest-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============ BACKEND (Next.js) ============
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: perpetest-backend
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: "postgresql://perpetest:perpetest123@postgres:5432/perpetest"
+      REDIS_URL: "redis://redis:6379"
+      RECOMMENDATION_SERVICE_URL: "http://recommendation:8001"
+      DELIVERY_SERVICE_URL: "http://delivery:8002"
+      NEXT_PUBLIC_API_URL: "http://localhost:3000"
+      LOG_LEVEL: "debug"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+    command: sh -c "npm run db:push && npm run db:seed && npm run dev"
+    networks:
+      - perpetest-network
+
+  # ============ PYTHON SERVICES ============
+  recommendation:
+    build:
+      context: ./services-python/recommendation
+      dockerfile: Dockerfile
+    container_name: perpetest-recommendation
+    environment:
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "8001:8001"
+    networks:
+      - perpetest-network
+
+  delivery:
+    build:
+      context: ./services-python/delivery
+      dockerfile: Dockerfile
+    container_name: perpetest-delivery
+    environment:
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "8002:8002"
+    networks:
+      - perpetest-network
+
+volumes:
+  postgres_data:
+
+networks:
+  perpetest-network:
+    driver: bridge
