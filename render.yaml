@@ -3,45 +3,23 @@ databases:
     databaseName: perpetest_db
     user: perpetest_user
     plan: free
-    version: 16
-    region: ohio
-
-  - name: perpetest-redis
-    provider: redis
-    plan: free
-    version: 7
-    region: ohio
-    evictionPolicy: noeviction
+    version: 15
+    region: us-east-1
 
 services:
   - type: web
     name: perpetest-backend
     plan: free
     runtime: node
-    region: ohio
-    buildCommand: cd backend && npm install && npm run build
-    startCommand: cd backend && npm start
-    healthCheckPath: /api/health
-    autoDeploy: true
+    region: us-east-1
+    buildCommand: npm install --prefix backend && npm run build --prefix backend
+    startCommand: npm start --prefix backend
     envVars:
       - key: DATABASE_URL
         fromDatabase:
           name: perpetest-db
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          name: perpetest-redis
-          type: redis
-          property: connectionString
       - key: NODE_ENV
         value: production
-      - key: LOG_LEVEL
-        value: info
-      - key: JWT_SECRET
-        generateValue: true
-      - key: NEXTAUTH_SECRET
-        generateValue: true
       - key: PORT
         value: "3000"
-      - key: NEXT_TELEMETRY_DISABLED
-        value: "1"
